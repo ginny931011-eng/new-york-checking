@@ -468,19 +468,22 @@ input[type="text"], input[type="number"], input[type="date"] {
 // ================= Firebase 設定（請填入你自己 Firebase 專案的值） =================
 // 去 https://console.firebase.google.com 建立專案後，在「專案設定」裡可以找到這段設定值
 const firebaseConfig = {
-  apiKey: "請填入你的 apiKey",
-  authDomain: "請填入你的 authDomain",
-  projectId: "請填入你的 projectId",
-  storageBucket: "請填入你的 storageBucket",
-  messagingSenderId: "請填入你的 messagingSenderId",
-  appId: "請填入你的 appId",
+  apiKey: "AIzaSyABGLUXsJ3TBW-eSl__B5e5JFPFO65Wv4g",
+  authDomain: "nyc-checking.firebaseapp.com",
+  projectId: "nyc-checking",
+  storageBucket: "nyc-checking.firebasestorage.app",
+  messagingSenderId: "174698290552",
+  appId: "1:174698290552:web:89ec101919fdaf2ba27c8d",
 };
 
 // 不需要登入，任何拿到網址的人都能直接讀寫資料
 // （方便爸爸直接打開就看，但代表網址等於通行證，請不要隨便分享出去）
 firebase.initializeApp(firebaseConfig);
 const firestore = firebase.firestore();
-const ledgerDocRef = firestore.collection('family_ledger').doc('data');
+// 舊版：所有資料塞在同一份文件裡（會有互相覆蓋、資料遺失的風險，保留參照只是為了搬移舊資料）
+const legacyDocRef = firestore.collection('family_ledger').doc('data');
+// 新版：每一筆交易都是獨立的文件，彼此互不影響，不會有覆蓋問題
+const txCollectionRef = firestore.collection('family_ledger_transactions');
 let unsubscribeSnapshot = null;
 
 // ================= 設定 ==================
@@ -516,8 +519,6 @@ const ACCOUNTS = [
   { id: 'brother', name: '蔡定恩' },
 ];
 
-const STORAGE_KEY = 'family_ledger_v1';
-
 // ---------- 狀態 ----------
 
 let state = {
@@ -536,36 +537,131 @@ function monthLabel(key) {
   return `${y}年${parseInt(m)}月`;
 }
 
-// ---------- 資料存取（Firestore 版，取代原本的 localStorage） ----------
-// 結構: { "gin": { "2026-09": [ {id,name,cat,type,amount,date}, ... ] }, "brother": {...} }
-// 資料存在 Firestore 的 family_ledger/data 這份文件裡，用 onSnapshot 即時監聽，
-// 只要任何一方存檔，兩邊畫面都會自動更新，不需要重新整理頁面。
+// ---------- 資料存取（Firestore 版，每筆交易獨立一份文件） ----------
+// 舊版把整個帳本存成一份大文件，任何人存檔都會整包覆蓋，
+// 如果兩人幾乎同時操作、或其中一人畫面還沒抓到最新資料就存檔，
+// 就會把對方的紀錄一起蓋掉——這是資料曾經消失的原因。
+// 新版讓每一筆交易都是 txCollectionRef 底下獨立的文件，新增/編輯/刪除都只動到那一筆，
+// 不會影響其他紀錄，也就不會有互相覆蓋的問題。
 
 function setSyncStatus(text) {
   const el = document.getElementById('sync-status');
   if (el) el.textContent = text;
 }
 
-function saveAll(data) {
+// 把 Firestore 回傳的一堆獨立交易文件，重新組成畫面需要的巢狀結構
+// { "gin": { "2026-09": [ {id,label,name,cat,type,amount,date}, ... ] }, "brother": {...} }
+function buildDbFromDocs(docs) {
+  const result = {};
+  docs.forEach((docSnap) => {
+    const t = docSnap.data();
+    const account = t.account;
+    const monthKey = (t.date || '').slice(0, 7) || currentMonthKey();
+    if (!result[account]) result[account] = {};
+    if (!result[account][monthKey]) result[account][monthKey] = [];
+    result[account][monthKey].push({
+      id: docSnap.id,
+      label: t.label,
+      name: t.name || '',
+      cat: t.cat || null,
+      type: t.type,
+      amount: t.amount,
+      date: t.date,
+    });
+  });
+  return result;
+}
+
+function saveTxDoc(id, data) {
   setSyncStatus('儲存中…');
-  ledgerDocRef.set(data)
+  txCollectionRef.doc(id).set(data)
     .then(() => setSyncStatus('已同步'))
     .catch((err) => {
       console.error('儲存失敗', err);
       setSyncStatus('儲存失敗');
-      alert('儲存失敗，請檢查網路連線，或確認你的帳號有存取權限。');
+      alert('儲存失敗，請檢查網路連線。');
     });
 }
 
-function startSync() {
+function deleteTxDoc(id) {
+  setSyncStatus('儲存中…');
+  txCollectionRef.doc(id).delete()
+    .then(() => setSyncStatus('已同步'))
+    .catch((err) => {
+      console.error('刪除失敗', err);
+      setSyncStatus('刪除失敗');
+      alert('刪除失敗，請檢查網路連線。');
+    });
+}
+
+// 只在「新版集合完全是空的」時執行一次：
+// 如果偵測到舊版單一文件裡有資料，把它搬過來（沿用原本的 id 當文件 id，
+// 就算兩人同時觸發搬移也不會產生重複資料）；如果連舊資料都沒有，才寫入範例資料。
+async function migrateLegacyIfNeeded() {
+  const existing = await txCollectionRef.limit(1).get();
+  if (!existing.empty) return; // 已經有新版資料了，不用搬移
+
+  const legacySnap = await legacyDocRef.get();
+  const legacy = legacySnap.exists ? legacySnap.data() : null;
+
+  if (!legacy) {
+    await seedInitialData();
+    return;
+  }
+
+  const batch = firestore.batch();
+  let count = 0;
+  Object.keys(legacy).forEach((account) => {
+    Object.keys(legacy[account] || {}).forEach((monthKey) => {
+      (legacy[account][monthKey] || []).forEach((tx) => {
+        const id = tx.id || uid();
+        batch.set(txCollectionRef.doc(id), {
+          account,
+          label: tx.label,
+          name: tx.name || '',
+          cat: tx.cat || null,
+          type: tx.type,
+          amount: tx.amount,
+          date: tx.date,
+        });
+        count++;
+      });
+    });
+  });
+
+  if (count > 0) {
+    await batch.commit();
+  } else {
+    await seedInitialData();
+  }
+}
+
+async function seedInitialData() {
+  // 第一次使用時的範例資料，方便馬上看到畫面長怎樣
+  const now = currentMonthKey();
+  const seed = [
+    { account: 'gin', label: '家人匯款', name: '', cat: null, type: 'income', amount: 10000, date: `${now}-01` },
+    { account: 'gin', label: '學費', name: 'NYU REGISTRATION', cat: 'tuition', type: 'expense', amount: 4500, date: `${now}-02` },
+    { account: 'gin', label: '房租', name: 'APARTMENT RENT', cat: 'mgmt', type: 'expense', amount: 2100, date: `${now}-01` },
+    { account: 'gin', label: '生活雜貨', name: 'WHOLE FOODS', cat: 'living', type: 'expense', amount: 102, date: `${now}-12` },
+    { account: 'brother', label: '家人匯款', name: '', cat: null, type: 'income', amount: 5000, date: `${now}-01` },
+    { account: 'brother', label: '房屋稅金', name: 'PROPERTY TAX', cat: 'tax', type: 'expense', amount: 700, date: `${now}-05` },
+  ];
+  const batch = firestore.batch();
+  seed.forEach((item) => batch.set(txCollectionRef.doc(uid()), item));
+  await batch.commit();
+}
+
+async function startSync() {
   setSyncStatus('連線中…');
-  unsubscribeSnapshot = ledgerDocRef.onSnapshot((snap) => {
-    if (snap.exists) {
-      db = snap.data();
-    } else {
-      db = seedData();
-      ledgerDocRef.set(db); // 第一次使用，把範例資料寫進 Firestore
-    }
+  try {
+    await migrateLegacyIfNeeded();
+  } catch (err) {
+    console.error('資料轉移失敗', err);
+  }
+
+  unsubscribeSnapshot = txCollectionRef.onSnapshot((snap) => {
+    db = buildDbFromDocs(snap.docs);
     setSyncStatus('已同步');
     renderMonthSelect();
     render();
@@ -580,27 +676,6 @@ function stopSync() {
     unsubscribeSnapshot();
     unsubscribeSnapshot = null;
   }
-}
-
-function seedData() {
-  // 第一次使用時的範例資料，方便馬上看到畫面長怎樣
-  const now = currentMonthKey();
-  return {
-    gin: {
-      [now]: [
-        { id: uid(), label: '家人匯款', name: '', cat: null, type: 'income', amount: 10000, date: `${now}-01` },
-        { id: uid(), label: '學費', name: 'NYU REGISTRATION', cat: 'tuition', type: 'expense', amount: 4500, date: `${now}-02` },
-        { id: uid(), label: '房租', name: 'APARTMENT RENT', cat: 'mgmt', type: 'expense', amount: 2100, date: `${now}-01` },
-        { id: uid(), label: '生活雜貨', name: 'WHOLE FOODS', cat: 'living', type: 'expense', amount: 102, date: `${now}-12` },
-      ],
-    },
-    brother: {
-      [now]: [
-        { id: uid(), label: '家人匯款', name: '', cat: null, type: 'income', amount: 5000, date: `${now}-01` },
-        { id: uid(), label: '房屋稅金', name: 'PROPERTY TAX', cat: 'tax', type: 'expense', amount: 700, date: `${now}-05` },
-      ],
-    },
-  };
 }
 
 function uid() {
@@ -647,15 +722,26 @@ function renderLegend() {
   ).join('') + `<span class="legend-item"><span class="legend-dot" style="background:${INCOME_LEGEND}"></span>家人匯款</span>`;
 }
 
+function computeCumulativeRemaining(account, uptoMonthKey) {
+  const acc = db[account] || {};
+  let total = 0;
+  Object.keys(acc).forEach((mKey) => {
+    if (mKey <= uptoMonthKey) {
+      acc[mKey].forEach((t) => {
+        total += t.type === 'income' ? t.amount : -t.amount;
+      });
+    }
+  });
+  return total;
+}
+
 function render() {
   const tx = getMonthTx().slice().sort((a, b) => a.date < b.date ? 1 : -1);
 
-  const income = tx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = tx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const remaining = income - expense;
+  const remaining = computeCumulativeRemaining(state.currentAccount, state.currentMonth);
 
   document.getElementById('remaining').textContent = fmt(remaining);
-  document.getElementById('remaining-sub').textContent = `${monthLabel(state.currentMonth)}可支配金額`;
+  document.getElementById('remaining-sub').textContent = `累積至${monthLabel(state.currentMonth)}的可支配金額`;
 
   document.querySelectorAll('.account-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.account === state.currentAccount);
@@ -784,9 +870,9 @@ function saveTx() {
   if (!amount || amount <= 0) { fieldError.textContent = '請輸入正確的金額'; return; }
   if (!date) { fieldError.textContent = '請選擇日期'; return; }
 
-  const monthKey = date.slice(0, 7);
+  const id = state.editingId || uid();
   const record = {
-    id: state.editingId || uid(),
+    account: state.currentAccount,
     label,
     name: original,
     amount,
@@ -795,32 +881,16 @@ function saveTx() {
     cat: selectedType === 'income' ? null : selectedCat,
   };
 
-  // 如果編輯時改了日期跨到別的月份，要先從原本月份移除
-  if (state.editingId) {
-    for (const mKey of Object.keys(db[state.currentAccount])) {
-      db[state.currentAccount][mKey] = db[state.currentAccount][mKey].filter(t => t.id !== state.editingId);
-    }
-  }
-
-  const acc = db[state.currentAccount] || (db[state.currentAccount] = {});
-  const arr = acc[monthKey] || (acc[monthKey] = []);
-  arr.push(record);
-
-  saveAll(db);
-  state.currentMonth = monthKey;
+  saveTxDoc(id, record);
+  state.currentMonth = date.slice(0, 7);
   closeModal();
-  renderMonthSelect();
-  render();
+  // 畫面會在 Firestore 傳回最新資料後自動更新（見 startSync 裡的 onSnapshot）
 }
 
 function deleteTx() {
   if (!state.editingId) return;
-  const arr = getMonthTx();
-  const idx = arr.findIndex(t => t.id === state.editingId);
-  if (idx >= 0) arr.splice(idx, 1);
-  saveAll(db);
+  deleteTxDoc(state.editingId);
   closeModal();
-  render();
 }
 
 // ---------- 上傳 (佔位，之後接 OCR) ----------
