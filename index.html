@@ -432,8 +432,10 @@ input[type="text"], input[type="number"], input[type="date"] {
       <label class="field-label">原始項目（選填，截圖上的英文名稱）</label>
       <input type="text" id="field-original" placeholder="例如：NYU REGISTRATION" />
 
-      <label class="field-label">分類</label>
-      <div class="category-select" id="category-select"></div>
+      <div id="category-field">
+        <label class="field-label">分類</label>
+        <div class="category-select" id="category-select"></div>
+      </div>
 
       <label class="field-label">類型</label>
       <div class="type-select">
@@ -737,8 +739,7 @@ function updateCategoryChipStyles() {
 function setType(type) {
   selectedType = type;
   document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
-  categorySelectEl.parentElement.style.display = type === 'income' ? 'none' : '';
-  document.querySelector('label[for=""]');
+  document.getElementById('category-field').style.display = type === 'income' ? 'none' : '';
 }
 
 function openModal(id) {
