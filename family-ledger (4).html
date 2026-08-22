@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>家庭生活費紀錄</title>
+<style>
+:root {
+  --surface-0: #F1EFE8;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --border: rgba(0,0,0,0.1);
+  --border-strong: rgba(0,0,0,0.22);
+  --text-primary: #1c1c1a;
+  --text-secondary: #5F5E5A;
+  --text-muted: #888780;
+  --success-bg: #EAF3DE;
+  --success-text: #27500A;
+  --danger: #A32D2D;
+
+  --cat-tuition: #534AB7;
+  --cat-mgmt: #0F6E56;
+  --cat-tax: #993C1D;
+  --cat-living: #993556;
+  --cat-misc: #854F0B;
+  --cat-income: #3B6D11;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-0: #17171a;
+    --surface-1: #232326;
+    --surface-2: #232326;
+    --border: rgba(255,255,255,0.12);
+    --border-strong: rgba(255,255,255,0.24);
+    --text-primary: #F1EFE8;
+    --text-secondary: #B4B2A9;
+    --text-muted: #888780;
+    --success-bg: #1a2b0f;
+    --success-text: #97C459;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: var(--surface-0);
+  color: var(--text-primary);
+}
+
+.app { max-width: 640px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+
+.topbar h1 { font-size: 18px; font-weight: 500; margin-bottom: 1.25rem; }
+
+.controls-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+
+.picker-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.account-picker { display: flex; gap: 8px; }
+
+.account-btn, .month-select {
+  padding: 8px 14px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.account-btn.active {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.hero-card {
+  background: var(--surface-1);
+  border-radius: 16px;
+  padding: 2rem 1.5rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  border: 0.5px solid var(--border);
+}
+
+.hero-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.hero-value { font-size: 44px; font-weight: 500; letter-spacing: -0.5px; }
+.hero-sub { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+
+.transactions-section { margin-bottom: 2rem; }
+
+.transactions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.transactions-title { font-size: 15px; font-weight: 500; }
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-1);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.add-btn:hover { background: var(--surface-0); }
+
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+.transaction-list {
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.transaction-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-top: 0.5px solid var(--border);
+  font-size: 14px;
+  background: var(--surface-1);
+  cursor: pointer;
+}
+.transaction-item:first-child { border-top: none; }
+.transaction-item:hover { background: var(--surface-0); }
+
+.tx-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tx-icon svg { width: 15px; height: 15px; }
+
+.icon-plus, .icon-upload, .icon-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  vertical-align: -3px;
+}
+.icon-plus svg, .icon-upload svg, .icon-x svg { width: 100%; height: 100%; }
+
+.tx-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tx-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tx-original {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transaction-item.income .tx-original { color: var(--success-text); opacity: 0.75; }
+
+.tx-date { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+
+.tx-amount { min-width: 76px; text-align: right; font-weight: 500; white-space: nowrap; }
+
+.transaction-item.income { background: var(--success-bg); }
+.transaction-item.income .tx-name,
+.transaction-item.income .tx-date,
+.transaction-item.income .tx-amount { color: var(--success-text); }
+.transaction-item.income:hover { filter: brightness(0.97); }
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  font-size: 14px;
+  border: 0.5px dashed var(--border);
+  border-radius: 12px;
+}
+
+.upload-section {
+  background: var(--surface-1);
+  border: 0.5px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+}
+.upload-label { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.upload-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-0);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.upload-btn:hover { background: var(--surface-1); }
+
+/* modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface-1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 0.5px solid var(--border);
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 16px;
+  padding: 4px;
+}
+
+.modal-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 4px; }
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.field-label:first-child { margin-top: 0; }
+
+input[type="text"], input[type="number"], input[type="date"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.category-select { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.category-chip {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 0.5px solid var(--border-strong);
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--surface-0);
+  color: var(--text-secondary);
+}
+.category-chip.active {
+  color: #fff;
+  border-color: transparent;
+}
+
+.type-select { display: flex; gap: 8px; }
+.type-btn {
+  flex: 1;
+  padding: 8px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-0);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+.type-btn.active { background: var(--text-primary); color: var(--surface-1); font-weight: 500; }
+
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+  min-height: 16px;
+  margin-top: 8px;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1rem 1.25rem;
+  border-top: 0.5px solid var(--border);
+}
+
+.btn-primary, .btn-secondary, .btn-danger {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  border: 0.5px solid var(--border-strong);
+}
+.btn-primary { background: var(--text-primary); color: var(--surface-1); border: none; font-weight: 500; }
+.btn-secondary { background: transparent; color: var(--text-secondary); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+
+.sync-status { font-size: 12px; color: var(--text-muted); }
+
+</style>
+</head>
+<body>
+
+<div class="app" id="app-root">
+
+  <header class="topbar">
+    <h1>家庭生活費紀錄 <span class="sync-status" id="sync-status"></span></h1>
+    <div class="controls-row">
+      <div class="picker">
+        <div class="picker-label">帳戶</div>
+        <div class="account-picker" id="account-picker">
+          <button class="account-btn active" data-account="gin">宋子儀</button>
+          <button class="account-btn" data-account="brother">蔡定恩</button>
+        </div>
+      </div>
+      <div class="picker">
+        <div class="picker-label">月份</div>
+        <select class="month-select" id="month-select"></select>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-card">
+      <div class="hero-label">目前剩餘資金</div>
+      <div class="hero-value" id="remaining">$0</div>
+      <div class="hero-sub" id="remaining-sub"></div>
+    </section>
+
+    <section class="transactions-section">
+      <div class="transactions-header">
+        <div class="transactions-title">交易明細</div>
+        <button class="add-btn" id="add-btn">
+          <span class="icon-plus"></span> 新增一筆
+        </button>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="transaction-list" id="tx-list"></div>
+      <div class="empty-state" id="empty-state" style="display:none;">
+        本月還沒有紀錄。上傳截圖或手動新增一筆。
+      </div>
+    </section>
+
+    <section class="upload-section" id="upload-section">
+      <div class="upload-label">上傳 Chase 截圖</div>
+      <div class="upload-hint">系統會辨識交易並試著分類，你可以在確認畫面調整</div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden />
+      <button class="upload-btn" id="upload-btn">
+        <span class="icon-upload"></span> 選擇截圖
+      </button>
+    </section>
+  </main>
+
+</div>
+
+<!-- 編輯 / 新增交易 modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modal-title">編輯交易</span>
+      <button class="modal-close" id="modal-close" aria-label="關閉"><span class="icon-x"></span></button>
+    </div>
+    <div class="modal-body">
+      <label class="field-label">中文名稱</label>
+      <input type="text" id="field-label" placeholder="例如：學費、房租、超市採買" />
+
+      <label class="field-label">原始項目（選填，截圖上的英文名稱）</label>
+      <input type="text" id="field-original" placeholder="例如：NYU REGISTRATION" />
+
+      <label class="field-label">分類</label>
+      <div class="category-select" id="category-select"></div>
+
+      <label class="field-label">類型</label>
+      <div class="type-select">
+        <button type="button" class="type-btn active" data-type="expense">支出</button>
+        <button type="button" class="type-btn" data-type="income">家人匯款</button>
+      </div>
+
+      <label class="field-label">金額</label>
+      <input type="number" id="field-amount" placeholder="0" min="0" step="1" />
+
+      <label class="field-label">日期</label>
+      <input type="date" id="field-date" />
+
+      <div class="field-error" id="field-error"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="delete-btn" style="display:none;">刪除</button>
+      <div style="flex:1;"></div>
+      <button class="btn-secondary" id="cancel-btn">取消</button>
+      <button class="btn-primary" id="save-btn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (compat 版，方便直接用 <script> 引入，不需要 build 工具) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+<script>
+// ================= Firebase 設定（請填入你自己 Firebase 專案的值） =================
+// 去 https://console.firebase.google.com 建立專案後，在「專案設定」裡可以找到這段設定值
+const firebaseConfig = {
+  apiKey: "請填入你的 apiKey",
+  authDomain: "請填入你的 authDomain",
+  projectId: "請填入你的 projectId",
+  storageBucket: "請填入你的 storageBucket",
+  messagingSenderId: "請填入你的 messagingSenderId",
+  appId: "請填入你的 appId",
+};
+
+// 不需要登入，任何拿到網址的人都能直接讀寫資料
+// （方便爸爸直接打開就看，但代表網址等於通行證，請不要隨便分享出去）
+firebase.initializeApp(firebaseConfig);
+const firestore = firebase.firestore();
+const ledgerDocRef = firestore.collection('family_ledger').doc('data');
+let unsubscribeSnapshot = null;
+
+// ================= 設定 ==================
+
+// bg = icon 底色（淺），fg = icon 顏色（深，跟底色同色系）, legend = 上面色塊圖例用的亮色
+const CATEGORIES = [
+  { id: 'tuition', name: '學費',       icon: 'school',   bg: '#EEEDFE', fg: '#3C3489', legend: '#7F77DD' },
+  { id: 'mgmt',    name: '房屋管理費', icon: 'home',     bg: '#E1F5EE', fg: '#085041', legend: '#1D9E75' },
+  { id: 'tax',     name: '房屋稅金',   icon: 'receipt',  bg: '#FAECE7', fg: '#712B13', legend: '#D85A30' },
+  { id: 'living',  name: '生活費',     icon: 'cart',     bg: '#FBEAF0', fg: '#72243E', legend: '#D4537E' },
+  { id: 'misc',    name: '雜費',       icon: 'dots',     bg: '#FAEEDA', fg: '#633806', legend: '#BA7517' },
+];
+const INCOME_BG = '#EAF3DE';
+const INCOME_FG = '#27500A';
+const INCOME_LEGEND = '#639922';
+const INCOME_ICON = 'arrowDown';
+
+// 內嵌 SVG icon，不依賴外部字體/CDN，離線或本機開檔都能正常顯示
+const ICONS = {
+  school: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>',
+  receipt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6"/></svg>',
+  cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.5 12.5A2 2 0 0 0 9.5 18h7a2 2 0 0 0 2-1.6L20 8H6"/><circle cx="9" cy="21" r="1"/><circle cx="18" cy="21" r="1"/></svg>',
+  dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
+  arrowDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M6 14l6 6 6-6"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
+
+const ACCOUNTS = [
+  { id: 'gin', name: '宋子儀' },
+  { id: 'brother', name: '蔡定恩' },
+];
+
+const STORAGE_KEY = 'family_ledger_v1';
+
+// ---------- 狀態 ----------
+
+let state = {
+  currentAccount: 'gin',
+  currentMonth: currentMonthKey(),
+  editingId: null, // null = 新增模式
+};
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split('-');
+  return `${y}年${parseInt(m)}月`;
+}
+
+// ---------- 資料存取（Firestore 版，取代原本的 localStorage） ----------
+// 結構: { "gin": { "2026-09": [ {id,name,cat,type,amount,date}, ... ] }, "brother": {...} }
+// 資料存在 Firestore 的 family_ledger/data 這份文件裡，用 onSnapshot 即時監聽，
+// 只要任何一方存檔，兩邊畫面都會自動更新，不需要重新整理頁面。
+
+function setSyncStatus(text) {
+  const el = document.getElementById('sync-status');
+  if (el) el.textContent = text;
+}
+
+function saveAll(data) {
+  setSyncStatus('儲存中…');
+  ledgerDocRef.set(data)
+    .then(() => setSyncStatus('已同步'))
+    .catch((err) => {
+      console.error('儲存失敗', err);
+      setSyncStatus('儲存失敗');
+      alert('儲存失敗，請檢查網路連線，或確認你的帳號有存取權限。');
+    });
+}
+
+function startSync() {
+  setSyncStatus('連線中…');
+  unsubscribeSnapshot = ledgerDocRef.onSnapshot((snap) => {
+    if (snap.exists) {
+      db = snap.data();
+    } else {
+      db = seedData();
+      ledgerDocRef.set(db); // 第一次使用，把範例資料寫進 Firestore
+    }
+    setSyncStatus('已同步');
+    renderMonthSelect();
+    render();
+  }, (err) => {
+    console.error('同步失敗', err);
+    setSyncStatus('連線失敗');
+  });
+}
+
+function stopSync() {
+  if (unsubscribeSnapshot) {
+    unsubscribeSnapshot();
+    unsubscribeSnapshot = null;
+  }
+}
+
+function seedData() {
+  // 第一次使用時的範例資料，方便馬上看到畫面長怎樣
+  const now = currentMonthKey();
+  return {
+    gin: {
+      [now]: [
+        { id: uid(), label: '家人匯款', name: '', cat: null, type: 'income', amount: 10000, date: `${now}-01` },
+        { id: uid(), label: '學費', name: 'NYU REGISTRATION', cat: 'tuition', type: 'expense', amount: 4500, date: `${now}-02` },
+        { id: uid(), label: '房租', name: 'APARTMENT RENT', cat: 'mgmt', type: 'expense', amount: 2100, date: `${now}-01` },
+        { id: uid(), label: '生活雜貨', name: 'WHOLE FOODS', cat: 'living', type: 'expense', amount: 102, date: `${now}-12` },
+      ],
+    },
+    brother: {
+      [now]: [
+        { id: uid(), label: '家人匯款', name: '', cat: null, type: 'income', amount: 5000, date: `${now}-01` },
+        { id: uid(), label: '房屋稅金', name: 'PROPERTY TAX', cat: 'tax', type: 'expense', amount: 700, date: `${now}-05` },
+      ],
+    },
+  };
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+let db = {};
+
+// ---------- 工具 ----------
+
+function getMonthTx() {
+  const acc = db[state.currentAccount] || (db[state.currentAccount] = {});
+  return acc[state.currentMonth] || (acc[state.currentMonth] = []);
+}
+
+function getAllMonthKeys() {
+  const keys = new Set();
+  Object.values(db).forEach(acc => Object.keys(acc).forEach(k => keys.add(k)));
+  keys.add(currentMonthKey());
+  return Array.from(keys).sort().reverse();
+}
+
+function catInfo(id) {
+  return CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+}
+
+function fmt(n) {
+  return '$' + Math.round(n).toLocaleString();
+}
+
+// ---------- 渲染 ----------
+
+function renderMonthSelect() {
+  const sel = document.getElementById('month-select');
+  const keys = getAllMonthKeys();
+  sel.innerHTML = keys.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+  sel.value = state.currentMonth;
+}
+
+function renderLegend() {
+  const legend = document.getElementById('legend');
+  legend.innerHTML = CATEGORIES.map(c =>
+    `<span class="legend-item"><span class="legend-dot" style="background:${c.legend}"></span>${c.name}</span>`
+  ).join('') + `<span class="legend-item"><span class="legend-dot" style="background:${INCOME_LEGEND}"></span>家人匯款</span>`;
+}
+
+function render() {
+  const tx = getMonthTx().slice().sort((a, b) => a.date < b.date ? 1 : -1);
+
+  const income = tx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const expense = tx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const remaining = income - expense;
+
+  document.getElementById('remaining').textContent = fmt(remaining);
+  document.getElementById('remaining-sub').textContent = `${monthLabel(state.currentMonth)}可支配金額`;
+
+  document.querySelectorAll('.account-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.account === state.currentAccount);
+  });
+
+  const list = document.getElementById('tx-list');
+  const empty = document.getElementById('empty-state');
+
+  if (tx.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = tx.map(t => {
+    const isIncome = t.type === 'income';
+    const info = isIncome ? { icon: INCOME_ICON, bg: INCOME_BG, fg: INCOME_FG } : catInfo(t.cat);
+    const original = t.name ? `<span class="tx-original">${escapeHtml(t.name)}</span>` : '';
+    return `
+      <div class="transaction-item ${isIncome ? 'income' : ''}" data-id="${t.id}">
+        <span class="tx-icon" style="background:${info.bg}; color:${info.fg}">
+          ${ICONS[info.icon]}
+        </span>
+        <span class="tx-text">
+          <span class="tx-label">${escapeHtml(t.label)}</span>
+          ${original}
+        </span>
+        <span class="tx-date">${t.date.slice(5)}</span>
+        <span class="tx-amount">${isIncome ? '+' : '-'}${fmt(t.amount)}</span>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.transaction-item').forEach(row => {
+    row.addEventListener('click', () => openModal(row.dataset.id));
+  });
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ---------- Modal ----------
+
+const overlay = document.getElementById('modal-overlay');
+const fieldLabel = document.getElementById('field-label');
+const fieldOriginal = document.getElementById('field-original');
+const fieldAmount = document.getElementById('field-amount');
+const fieldDate = document.getElementById('field-date');
+const fieldError = document.getElementById('field-error');
+const categorySelectEl = document.getElementById('category-select');
+const deleteBtn = document.getElementById('delete-btn');
+const modalTitle = document.getElementById('modal-title');
+
+let selectedCat = CATEGORIES[0].id;
+let selectedType = 'expense';
+
+function renderCategoryChips() {
+  categorySelectEl.innerHTML = CATEGORIES.map(c =>
+    `<button type="button" class="category-chip" data-cat="${c.id}" style="--chip-color:${c.legend}">${c.name}</button>`
+  ).join('');
+  categorySelectEl.querySelectorAll('.category-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      selectedCat = chip.dataset.cat;
+      updateCategoryChipStyles();
+    });
+  });
+}
+
+function updateCategoryChipStyles() {
+  categorySelectEl.querySelectorAll('.category-chip').forEach(chip => {
+    const active = chip.dataset.cat === selectedCat;
+    chip.classList.toggle('active', active);
+    chip.style.background = active ? chip.style.getPropertyValue('--chip-color') : '';
+  });
+}
+
+function setType(type) {
+  selectedType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  categorySelectEl.parentElement.style.display = type === 'income' ? 'none' : '';
+  document.querySelector('label[for=""]');
+}
+
+function openModal(id) {
+  fieldError.textContent = '';
+  if (id) {
+    const t = getMonthTx().find(x => x.id === id);
+    state.editingId = id;
+    modalTitle.textContent = '編輯交易';
+    fieldLabel.value = t.label;
+    fieldOriginal.value = t.name || '';
+    fieldAmount.value = t.amount;
+    fieldDate.value = t.date;
+    selectedCat = t.cat || CATEGORIES[0].id;
+    setType(t.type);
+    deleteBtn.style.display = '';
+  } else {
+    state.editingId = null;
+    modalTitle.textContent = '新增交易';
+    fieldLabel.value = '';
+    fieldOriginal.value = '';
+    fieldAmount.value = '';
+    fieldDate.value = state.currentMonth + '-' + String(new Date().getDate()).padStart(2, '0');
+    selectedCat = CATEGORIES[0].id;
+    setType('expense');
+    deleteBtn.style.display = 'none';
+  }
+  updateCategoryChipStyles();
+  overlay.classList.add('open');
+}
+
+function closeModal() {
+  overlay.classList.remove('open');
+}
+
+function saveTx() {
+  const label = fieldLabel.value.trim();
+  const original = fieldOriginal.value.trim();
+  const amount = parseFloat(fieldAmount.value);
+  const date = fieldDate.value;
+
+  if (!label) { fieldError.textContent = '請輸入中文名稱'; return; }
+  if (!amount || amount <= 0) { fieldError.textContent = '請輸入正確的金額'; return; }
+  if (!date) { fieldError.textContent = '請選擇日期'; return; }
+
+  const monthKey = date.slice(0, 7);
+  const record = {
+    id: state.editingId || uid(),
+    label,
+    name: original,
+    amount,
+    date,
+    type: selectedType,
+    cat: selectedType === 'income' ? null : selectedCat,
+  };
+
+  // 如果編輯時改了日期跨到別的月份，要先從原本月份移除
+  if (state.editingId) {
+    for (const mKey of Object.keys(db[state.currentAccount])) {
+      db[state.currentAccount][mKey] = db[state.currentAccount][mKey].filter(t => t.id !== state.editingId);
+    }
+  }
+
+  const acc = db[state.currentAccount] || (db[state.currentAccount] = {});
+  const arr = acc[monthKey] || (acc[monthKey] = []);
+  arr.push(record);
+
+  saveAll(db);
+  state.currentMonth = monthKey;
+  closeModal();
+  renderMonthSelect();
+  render();
+}
+
+function deleteTx() {
+  if (!state.editingId) return;
+  const arr = getMonthTx();
+  const idx = arr.findIndex(t => t.id === state.editingId);
+  if (idx >= 0) arr.splice(idx, 1);
+  saveAll(db);
+  closeModal();
+  render();
+}
+
+// ---------- 上傳 (佔位，之後接 OCR) ----------
+
+function handleUpload(files) {
+  if (!files || files.length === 0) return;
+  // TODO: 這裡之後接上圖片辨識服務，自動帶出項目名稱、金額、日期、分類建議。
+  // 目前先開啟「新增交易」讓你手動輸入，辨識結果之後會用同一個表單做確認。
+  alert(`已選擇 ${files.length} 張截圖。自動辨識功能還沒接上，先手動輸入這幾筆吧。`);
+  openModal(null);
+}
+
+// ---------- 事件綁定 ----------
+
+document.getElementById('account-picker').addEventListener('click', (e) => {
+  const btn = e.target.closest('.account-btn');
+  if (!btn) return;
+  state.currentAccount = btn.dataset.account;
+  renderMonthSelect();
+  render();
+});
+
+document.getElementById('month-select').addEventListener('change', (e) => {
+  state.currentMonth = e.target.value;
+  render();
+});
+
+document.getElementById('add-btn').addEventListener('click', () => openModal(null));
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('cancel-btn').addEventListener('click', closeModal);
+document.getElementById('save-btn').addEventListener('click', saveTx);
+document.getElementById('delete-btn').addEventListener('click', deleteTx);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+document.querySelectorAll('.type-btn').forEach(b => {
+  b.addEventListener('click', () => setType(b.dataset.type));
+});
+
+document.getElementById('upload-btn').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+document.getElementById('file-input').addEventListener('change', (e) => {
+  handleUpload(e.target.files);
+  e.target.value = '';
+});
+
+// ---------- 初始化 ----------
+
+document.querySelector('.icon-plus').innerHTML = ICONS.plus;
+document.querySelector('.icon-upload').innerHTML = ICONS.upload;
+document.querySelector('.icon-x').innerHTML = ICONS.x;
+
+renderCategoryChips();
+renderLegend();
+renderMonthSelect();
+render();
+startSync();
+
+</script>
+</body>
+</html>
